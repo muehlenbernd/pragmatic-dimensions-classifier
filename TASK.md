@@ -1,5 +1,7 @@
 # Task: Data Familiarization & Preliminary Baselines
 
+**Phase status: ✅ COMPLETE** (June 16, 2026). See `REPORT1.md` for full findings. Next step: design discussion to lock in binarization strategy, cross-corpus architecture, and transformer baseline plan before Phase 2.
+
 ## Context (read this first)
 
 This repo is the early-exploration phase of a portfolio project for Roland Mühlenbernd, a computational linguist transitioning from academia (ZAS, Berlin) to industry NLP roles. The project investigates sentence-level **formality**, and its relationship to **informativeness** and **implicature**, using two openly available datasets. It is the main remaining technical piece of "Level 1" of a structured career-transition plan, and will eventually become a public GitHub repo demonstrating both ML engineering skill and linguistic domain expertise.
@@ -19,31 +21,37 @@ This repo is the early-exploration phase of a portfolio project for Roland Mühl
 
 - Raw file: `http://people.rc.rit.edu/~bsm9339/corpora/squinky_corpus/mturk_merged.csv` (linked from the official `meyersbs/squinky` repo's `download.py`)
 - **Note:** this is a personal academic homepage, not a stable archive. Verify the URL resolves before relying on it; if down, check `meyersbs/squinky` GitHub issues for a mirror, or contact the maintainer.
-- **Column structure is not fully documented.** The reference implementation (`meyersbs/squinky/squinky/classifier.py`) accesses the CSV by position: column 0 = id, column 1 = formality (1–7), column 2 = informativeness (1–7), column 3 = implicature (1–7), last column = sentence text. This implies there may be additional undocumented columns (e.g. genre/source) in between. **Print and inspect `df.columns` after loading — do not assume the schema beyond this.**
-- Reference binarization precedent (from the same repo): score > 4 → positive class (formal / informative / implicative), else negative. One possible convention, not necessarily the one we'll use for the final project.
-- License: the wrapper code is MIT; the underlying corpus data has no explicit license stated in the repo or paper. Treat with the same caution as an unredistributable source until confirmed — same posture as GYAFC.
+- **Download note (confirmed June 2026):** the server redirects HTTP → HTTPS but has a broken certificate chain. Use `requests.get(..., verify=False)` with `urllib3.disable_warnings()`. Documented in the notebook.
+- **Column structure (confirmed June 2026):** the CSV has a proper header row. Schema is exactly: `id` (int), `formality` (float), `informativeness` (float), `implicature` (float), `sentence` (str). No additional columns. No renaming needed.
+- **Data quality note:** sentence values carry a leading integer prefix (e.g. `"10In High Bay 4…"`) — original sentence position markers from source documents concatenated without a space. Strip with `str.replace(r"^\d+", "")` before modeling.
+- **Genre information:** SQUINKY! was compiled from blog (2,110), news (3,009), and forum (2,569) sentences, but **the CSV contains no genre column** and genre cannot be recovered by ID-range inference (row ordering does not match compilation order). Genre is unavailable for this corpus.
+- **Reference classifier:** `meyersbs/squinky` uses POS + lemma + stem + chunk features (Vincze 2015) with `DictVectorizer + LogisticRegression`, 25% test split, no fixed random seed — not TF-IDF. Reported F1 (0.82/0.84/0.60) is not directly comparable to a TF-IDF baseline.
+- Reference binarization (confirmed): score > 4 → positive class (formal / informative / implicative), else negative.
+- License: the wrapper code is MIT; the underlying corpus data has no explicit license stated in the repo or paper. Treat as research-use only, do not redistribute.
 
 ## Tasks for this notebook
 
-1. **Environment & imports.** Standard stack: pandas, numpy, scikit-learn, matplotlib/seaborn, `datasets`, requests.
+1. ✅ **Environment & imports.** Standard stack: pandas, numpy, scikit-learn, matplotlib/seaborn, `datasets`, requests.
 
-2. **Load both datasets.** Pavlick-Tetreault via `datasets`; SQUINKY! via direct download into `data/raw/` (gitignored, cached locally so re-runs don't re-download).
+2. ✅ **Load both datasets.** Pavlick-Tetreault via `datasets`; SQUINKY! via direct download into `data/raw/` (gitignored, cached locally so re-runs don't re-download).
 
-3. **Inspect both.**
+3. ✅ **Inspect both.**
    - Shape, columns, dtypes, missing values
    - Summary statistics per dimension (formality for both; informativeness/implicature for SQUINKY!)
    - Distribution plots per genre/domain
    - Note differences in scale (−3..3 vs. 1..7), genre composition, sentence length
 
-4. **Preliminary classifier tests (2–3 models).** Goal is signal, not a finished pipeline:
-   - **Model A:** TF-IDF + Logistic Regression, in-domain on Pavlick-Tetreault (binarize formality — flag the threshold choice explicitly in a markdown cell, including alternatives considered).
-   - **Model B:** TF-IDF + Logistic Regression, in-domain on SQUINKY! formality.
-   - **Model C (the interesting one):** cross-corpus test — train on one, evaluate on the other (both directions if time allows). This previews the cross-corpus generalization question that's central to the eventual project design.
-   - Report accuracy, F1, confusion matrix for each. Don't over-engineer preprocessing at this stage.
+4. ✅ **Preliminary classifier tests (2–3 models).** Goal is signal, not a finished pipeline:
+   - **Model A:** TF-IDF + Logistic Regression, in-domain on Pavlick-Tetreault — macro F1: **0.76**
+   - **Model B:** TF-IDF + Logistic Regression, in-domain on SQUINKY! formality — macro F1: **0.81**
+   - **Model C (the interesting one):** cross-corpus test, both directions:
+     - Train PT → Test SQUINKY!: macro F1 **0.79**
+     - Train SQUINKY! → Test PT: macro F1 **0.75**
+   - Key finding: cross-corpus transfer is strong — essentially no degradation from in-domain.
 
-5. **Document findings inline.** After each major step, add a markdown cell with observations — what's straightforward, what looks like a problem (class imbalance? genre mismatch? noisy implicature labels?), and ideas for the final design.
+5. ✅ **Document findings inline.** Observation cells completed throughout the notebook.
 
-6. **Close with an "Open Questions for Design Discussion" cell** — concrete things to decide before building the final classifier (classification vs. regression framing, binarization rationale, how to handle implicature's known unreliability, whether genre should be a stratification variable or a feature).
+6. ✅ **Close with an "Open Questions for Design Discussion" cell** — 7 concrete open questions logged. See also `REPORT1.md` for the full writeup.
 
 ## Out of scope for this phase
 
