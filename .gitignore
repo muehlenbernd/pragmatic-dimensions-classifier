@@ -1,0 +1,16 @@
+# Data (downloaded locally, not redistributed — see data/README.md)
+data/raw/*
+!data/raw/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# OS
+.DS_Store
