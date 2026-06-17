@@ -168,6 +168,32 @@ blog, news, and email have strong, transferable formality signal (AUC 0.771–0.
 
 **Revised implication.** Cross-corpus transfer holds cleanly for three of four genres. The `answers` limitation is a genuine ceiling that harmonization alone will not fix — it likely requires either a genre-matched training signal or explicit acknowledgment as a scope boundary. The project framing should be precise: "strong cross-corpus transfer across news, blog, and email registers; Q&A-style text is a harder subproblem." Questions 2 and 7 (binarization and scale harmonization) remain the next priority for the other three genres, but `answers` warrants a separate note in the final write-up.
 
+### 2.2 Harmonization experiment (Q2 + Q7): z-score normalization and consistent threshold
+
+Both scales were z-score normalized and all four models were rerun with a z > 0 binarization boundary ("more formal than this corpus's average"). Results:
+
+| Model | macro F1 (current) | macro F1 (harmonized) | delta |
+|---|---|---|---|
+| Model A — PT in-domain | 0.76 | 0.77 | +0.01 |
+| Model B — SQUINKY! in-domain | 0.81 | 0.81 | 0.00 |
+| Model C1 — PT → SQUINKY! | 0.79 | 0.76 | −0.03 |
+| Model C2 — SQUINKY! → PT | 0.75 | 0.74 | −0.01 |
+
+Genre-stratified C2 under harmonized labels:
+
+| Genre | macro F1 (current) | AUC (current) | macro F1 (harmonized) | AUC (harmonized) | F1 delta | AUC delta |
+|---|---|---|---|---|---|---|
+| news | 0.745 | 0.810 | 0.752 | 0.822 | +0.007 | +0.012 |
+| email | 0.669 | 0.771 | 0.636 | 0.765 | −0.033 | −0.006 |
+| blog | 0.768 | 0.843 | 0.776 | 0.857 | +0.008 | +0.014 |
+| answers | 0.601 | 0.685 | 0.596 | 0.684 | −0.005 | −0.001 |
+
+**Findings:**
+- All deltas are within ±0.03 with no consistent direction. Harmonization makes no meaningful difference.
+- The `answers` AUC is completely invariant (0.685 → 0.684), confirming that the distribution gap is in the feature space — the vocabulary the model learned from SQUINKY! simply doesn't transfer as well to Q&A text, regardless of how the labels are defined.
+- Email declines marginally under harmonization, suggesting the current median-split label was already well-calibrated for that genre.
+- **Conclusion:** scale and threshold choices are empirically second-order for this model class. The decisions are therefore framing choices, not performance levers. See Q2 and Q7 in §3 for recommendations.
+
 ---
 
 ## 3. Open Questions for Design Discussion
@@ -175,8 +201,8 @@ blog, news, and email have strong, transferable formality signal (AUC 0.771–0.
 1. **✅ ANSWERED — What's driving the cross-corpus transfer — register extremes or genuine generalization?**  
    *Resolved by the genre-stratified analysis, balanced-reweight test, and threshold sweep in §2.1.* The transfer is genuine: all four PT genres beat their majority-class baseline, and mid-register genres (blog, email) do not collapse — blog is the best-performing genre. The aggregate cross-corpus score is **not** an artifact of easy register extremes. The per-genre variation reflects two distinct effects: (a) a minor, mostly-fixed threshold calibration issue (email, answers gain a few points from tuning); and (b) a genuine distribution gap in the `answers` genre (AUC 0.685) that no threshold adjustment can address, because Q&A formality cues are out-of-distribution for a SQUINKY!-trained model. **Consequence:** the cross-corpus framing is validated for news/blog/email. The `answers` genre is a harder subproblem that should be scoped explicitly — either as a limitation or as a separate research question — rather than treated as equivalent to the other three genres. Questions 2 and 7 (binarization and scale harmonization) remain the next priority, with the `answers` caveat noted.
 
-2. **Binarization strategy: median split vs. fixed threshold vs. continuous framing.**  
-   Model A uses a median split (threshold = 0.0 for PT); Model B uses >4 (reference convention for SQUINKY!). These are not equivalent choices — the median split guarantees class balance regardless of score distribution, while >4 makes a substantive claim about what "formal" means. For the final design: should both corpora use a consistent, theoretically motivated threshold? Or should the project move to a regression framing throughout, avoiding the binarization decision entirely?
+2. **✅ ANSWERED — Binarization strategy: median split vs. fixed threshold vs. continuous framing.**  
+   *Resolved by the harmonization experiment in §4b.* Empirically, the choice of threshold is second-order: rerunning all four models with z-score normalization and a consistent z > 0 boundary produces deltas of ±0.01–0.03 with no consistent direction. The specific threshold does not drive performance. The choice is therefore **theoretical and framing** rather than empirical. **Recommendation:** adopt z > 0 (z-score binarization) for the final design — "more formal than this corpus's average" is corpus-independent and theoretically clean — but do not expect it to change results. The regression framing (skip binarization, evaluate with Spearman ρ) remains an open option for Phase 2 but requires a different evaluation protocol and is not tested here.
 
 3. **Informativeness: co-target, control variable, or confound to report?**  
    Formality and informativeness correlate at r = 0.77. A formality classifier will partially learn informativeness signal and vice versa. Decision: should informativeness be included as a joint classification target, used as a feature, controlled for in the error analysis, or simply reported as a known confound with appropriate caveats?
@@ -190,8 +216,8 @@ blog, news, and email have strong, transferable formality signal (AUC 0.771–0.
 6. **Transformer baseline: how much headroom is realistically available?**  
    TF-IDF + LogReg reaches 0.76–0.81 in-domain. The reference implementation's linguistic feature pipeline (POS + lemmas + chunks) reaches 0.82–0.84 on SQUINKY!. Before committing to transformer fine-tuning, it is worth asking whether the remaining error is primarily lexical (suggesting embeddings would help significantly) or structural/pragmatic (suggesting a harder ceiling regardless of model). This affects how to frame the transformer stage and what improvement to claim as a contribution.
 
-7. **Cross-corpus architecture: harmonization vs. domain adaptation framing.**  
-   The strong baseline transfer is encouraging, but the scale mismatch (−3..3 vs. 1..7) and binarization asymmetry mean the current setup is not a clean test. For the final design: should cross-corpus generalization be tested on raw binarized labels (current approach), on z-score normalized continuous scores, or via a domain adaptation method? The answer shapes the project's methodological contribution.
+7. **✅ ANSWERED — Cross-corpus architecture: harmonization vs. domain adaptation framing.**  
+   *Resolved by the harmonization experiment in §4b.* Z-score normalizing both scales and aligning the binarization boundary produces deltas of ±0.01–0.03 — no systematic improvement. The scale mismatch (−3..3 vs. 1..7) is not a significant driver of cross-corpus performance at this stage, because TF-IDF features are vocabulary-based and never see the raw score values. **Recommendation:** the current approach (independent per-corpus binarization) is adequate for the classification framing. Explicit scale harmonization is not needed as a preprocessing step. Domain adaptation methods remain worth considering in Phase 2 if the `answers` distribution gap (AUC 0.685, confirmed invariant to relabeling) is to be addressed — but that is a separate design decision from harmonization.
 
 ---
 
