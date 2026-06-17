@@ -134,14 +134,46 @@ This is the headline result: a TF-IDF surface-form classifier transfers across c
 
 **Recall asymmetry is consistent across both directions.** In C1, informal recall is high (0.92) but formal recall is lower (0.68). In C2, the pattern partially inverts but informal recall remains stronger (0.84 vs. 0.67 for formal). This suggests informal vocabulary (forum/answers text: "lol", "thanks", question particles, contractions) is more distinctively lexical and therefore more transferable than formal register markers, which are subtler and more corpus-specific.
 
-**Caution:** the strong generalization may be partly driven by genre-extreme sentences (newswire vs. forum/answers) that are easily separable in both corpora. A genre-stratified breakdown on PT — evaluating C2 predictions separately on news, blog, email, answers — would test whether generalization is uniform or masks failures in mid-register subsets.
+**Caution (now tested — see §2.1):** the strong generalization could in principle be driven by genre-extreme sentences (newswire vs. forum/answers) that are easily separable in both corpora. A genre-stratified breakdown on PT tested whether generalization is uniform or masks failures in mid-register subsets. Result below.
+
+### 2.1 Genre-stratified cross-corpus evaluation (C2: train SQUINKY! → test PT)
+
+Because PT carries a `domain` label, the C2 predictions were split by genre and compared against each genre's majority-class baseline macro F1 (the "collapse toward chance" reference).
+
+| Genre   | n      | % formal | accuracy | macro F1 | baseline F1 | margin | F1 informal | F1 formal |
+|---------|--------|----------|----------|----------|-------------|--------|-------------|-----------|
+| news    | 2,775  | 77.6     | 0.836    | 0.745    | 0.437       | +0.31  | 0.592       | 0.898     |
+| email   | 1,701  | 61.0     | 0.669    | 0.669    | 0.379       | +0.29  | 0.664       | 0.674     |
+| blog    | 1,821  | 57.8     | 0.771    | 0.768    | 0.366       | +0.40  | 0.741       | 0.795     |
+| answers | 4,977  | 27.6     | 0.733    | 0.601    | 0.420       | +0.18  | 0.831       | 0.371     |
+| OVERALL | 11,274 | 49.8     | 0.755    | 0.753    | 0.334       | +0.42  | 0.774       | 0.732     |
+
+**Finding 1 — transfer is real and present in every genre.** All four genres beat their majority-class baseline substantially (+0.18 to +0.40 macro F1). No genre collapses toward chance. Critically, the mid-register genres do *not* fail: blog is the single best genre (0.768) and email is well above baseline (0.669). This refutes the "easy extremes carry the aggregate" hypothesis — the cross-corpus formality *signal* genuinely transfers.
+
+**Finding 2 — initial hypothesis (threshold mismatch) ruled out by further testing.** Within each genre the model is strong on the locally-dominant class and weak on the local minority, which initially looked like a threshold-calibration problem. Two confirmatory tests showed otherwise:
+
+- **`class_weight='balanced'`** (retraining with loss reweighted by inverse class frequency): deltas of +0.001 to +0.008 across all genres — essentially no change.
+- **Threshold sweep** (optimising the inference-time cutpoint from 0.1 to 0.9 per genre): optimal thresholds cluster narrowly at 0.36–0.48, gains of +0.001 to +0.033 — again marginal.
+
+**Finding 3 — the AUC breakdown reveals a genuine distribution gap in `answers`.** AUC measures ranking quality independent of any threshold and therefore isolates the signal itself:
+
+| Genre   | AUC   | macro F1 @0.5 |
+|---------|-------|---------------|
+| blog    | 0.843 | 0.768         |
+| news    | 0.810 | 0.745         |
+| email   | 0.771 | 0.669         |
+| answers | 0.685 | 0.601         |
+
+blog, news, and email have strong, transferable formality signal (AUC 0.771–0.843). `answers` is genuinely weaker (AUC 0.685). This is not a threshold or weighting artifact — it reflects a vocabulary/distribution gap: Yahoo Answers-style Q&A text has different formality cues than anything in SQUINKY!'s training genres (news/blog/forum), and the formal minority within `answers` looks lexically closer to informal `answers` text than formal SQUINKY! text looks to its informal counterpart.
+
+**Revised implication.** Cross-corpus transfer holds cleanly for three of four genres. The `answers` limitation is a genuine ceiling that harmonization alone will not fix — it likely requires either a genre-matched training signal or explicit acknowledgment as a scope boundary. The project framing should be precise: "strong cross-corpus transfer across news, blog, and email registers; Q&A-style text is a harder subproblem." Questions 2 and 7 (binarization and scale harmonization) remain the next priority for the other three genres, but `answers` warrants a separate note in the final write-up.
 
 ---
 
 ## 3. Open Questions for Design Discussion
 
-1. **What's driving the cross-corpus transfer — register extremes or genuine generalization?**  
-   Both corpora contain strongly contrasting genres (formal newswire vs. informal forum/answers). The aggregate F1 may be flattering if the model succeeds on extremes and fails on mid-register sentences, which just don't move the aggregate number much. A genre-stratified evaluation on PT (which has domain labels) would test this. Decision: is the cross-corpus framing already validated by these numbers, or does this check need to happen first?
+1. **✅ ANSWERED — What's driving the cross-corpus transfer — register extremes or genuine generalization?**  
+   *Resolved by the genre-stratified analysis, balanced-reweight test, and threshold sweep in §2.1.* The transfer is genuine: all four PT genres beat their majority-class baseline, and mid-register genres (blog, email) do not collapse — blog is the best-performing genre. The aggregate cross-corpus score is **not** an artifact of easy register extremes. The per-genre variation reflects two distinct effects: (a) a minor, mostly-fixed threshold calibration issue (email, answers gain a few points from tuning); and (b) a genuine distribution gap in the `answers` genre (AUC 0.685) that no threshold adjustment can address, because Q&A formality cues are out-of-distribution for a SQUINKY!-trained model. **Consequence:** the cross-corpus framing is validated for news/blog/email. The `answers` genre is a harder subproblem that should be scoped explicitly — either as a limitation or as a separate research question — rather than treated as equivalent to the other three genres. Questions 2 and 7 (binarization and scale harmonization) remain the next priority, with the `answers` caveat noted.
 
 2. **Binarization strategy: median split vs. fixed threshold vs. continuous framing.**  
    Model A uses a median split (threshold = 0.0 for PT); Model B uses >4 (reference convention for SQUINKY!). These are not equivalent choices — the median split guarantees class balance regardless of score distribution, while >4 makes a substantive claim about what "formal" means. For the final design: should both corpora use a consistent, theoretically motivated threshold? Or should the project move to a regression framing throughout, avoiding the binarization decision entirely?
